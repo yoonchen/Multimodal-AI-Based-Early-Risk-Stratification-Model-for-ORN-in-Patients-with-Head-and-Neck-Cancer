@@ -1,0 +1,200 @@
+{
+  "project_name": "ORN_baseline_then_survival_pipeline",
+  "goal": "先完成 baseline 風險分類模型，再進行 survival analysis，最後再考慮加入影像做多模態模型。",
+  "current_decisions": {
+    "baseline_first": true,
+    "survival_after_baseline": true,
+    "exclude_from_baseline_for_now": [
+      "Panoramic",
+      "是否復發",
+      "Stage_analyze"
+    ],
+    "target_label": "ORN_label",
+    "time_variables_for_survival": {
+      "start_time": "Index Date",
+      "end_time": "End point",
+      "event": "ORN_label"
+    }
+  },
+  "tables": {
+    "patient_baseline": {
+      "description": "一列一個病人，放固定或近似固定的基線欄位",
+      "recommended_columns": [
+        "ipatient",
+        "Index Date",
+        "年齡",
+        "性別",
+        "ECOG",
+        "Tumor location",
+        "T_analyze",
+        "N_analyze",
+        "M_analyze",
+        "Tumor_size_4cm",
+        "病理型態",
+        "吸菸史",
+        "喝酒史",
+        "嚼檳榔史",
+        "有無假牙（固定）",
+        "有無假牙（活動）",
+        "有無缺牙",
+        "DM",
+        "HTN",
+        "ESRD",
+        "Osteoporosis",
+        "Panoramic",
+        "是否復發",
+        "ORN_label"
+      ],
+      "notes": [
+        "Stage_analyze 先刪除，因為已經有 T/N/M。",
+        "Panoramic 先保留在表中，但 baseline 模型先不用。",
+        "是否復發先保留在表中，但 baseline 模型先不用。"
+      ]
+    },
+    "surgery_events": {
+      "description": "一列一次手術事件，保留手術時間序列資訊",
+      "recommended_columns": [
+        "ipatient",
+        "surgery_order",
+        "手術日期",
+        "Neck dissection_analyze",
+        "Tooth extraction",
+        "Tooth extraction number",
+        "Mandible or Maxilla excision",
+        "Mandible_resection",
+        "Maxilla_resection",
+        "Reconstruction_type"
+      ],
+      "notes": [
+        "Mandible or Maxilla excision 可由 Mandible_resection / Maxilla_resection 推知，後續可考慮刪除。",
+        "Reconstruction_type 定義：0=None, 1=Local flap, 2=Regional flap, 3=Free flap。"
+      ]
+    },
+    "rt_events": {
+      "description": "一列一次放療事件，保留放療時間與劑量結構資訊",
+      "recommended_columns": [
+        "ipatient",
+        "rt_order",
+        "放射治療方式",
+        "放射治療時機",
+        "RT_start_date",
+        "RT_duration_days",
+        "CTV_H_dose",
+        "CTV_H_Fraction number",
+        "CTV_M_dose",
+        "CTV_M_Fraction number",
+        "CTV_L_dose",
+        "CTV_L_Fraction number",
+        "是否完成放射治療"
+      ],
+      "notes": [
+        "CTV_M 缺失多半是結構性缺失，不要直接當一般遺失值補平均。",
+        "baseline 模型先不要直接使用放射治療次數，避免未來資訊洩漏。"
+      ]
+    },
+    "model_baseline": {
+      "description": "一列一個病人，專門給 baseline ML 分類模型使用",
+      "recommended_columns": [
+        "ipatient",
+        "年齡",
+        "性別",
+        "ECOG",
+        "Tumor location",
+        "T_analyze",
+        "N_analyze",
+        "M_analyze",
+        "Tumor_size_4cm",
+        "病理型態",
+        "是否進行手術",
+        "tooth_extraction_any",
+        "mandible_resection_any",
+        "maxilla_resection_any",
+        "reconstruction_max",
+        "has_L",
+        "has_M",
+        "CTV_H_dose_max",
+        "CTV_M_dose_max",
+        "CTV_L_dose_max",
+        "吸菸史",
+        "喝酒史",
+        "嚼檳榔史",
+        "DM",
+        "HTN",
+        "ESRD",
+        "Osteoporosis",
+        "ORN_label"
+      ],
+      "derived_rules": {
+        "tooth_extraction_any": "任何一次手術事件中 Tooth extraction = Yes，則為 1，否則 0。",
+        "mandible_resection_any": "任何一次手術事件中 Mandible_resection != None，則為 1，否則 0。",
+        "maxilla_resection_any": "任何一次手術事件中 Maxilla_resection != None，則為 1，否則 0。",
+        "reconstruction_max": "取所有手術事件中 Reconstruction_type 的最大值。",
+        "has_M": "任何一次放療事件中 CTV_M_dose > 0，則為 1，否則 0。",
+        "has_L": "任何一次放療事件中 CTV_L_dose > 0，則為 1，否則 0。",
+        "CTV_H_dose_max": "取所有放療事件中 CTV_H_dose 的最大值。",
+        "CTV_M_dose_max": "取所有放療事件中 CTV_M_dose 的最大值。",
+        "CTV_L_dose_max": "取所有放療事件中 CTV_L_dose 的最大值。"
+      },
+      "exclude_for_now": [
+        "Panoramic",
+        "是否復發",
+        "Stage_analyze",
+        "放射治療次數",
+        "手術次數"
+      ]
+    }
+  },
+  "sanity_checks": [
+    "確認 ORN_label 只有 0/1。",
+    "確認 has_M、has_L 只有 0/1。",
+    "確認 reconstruction_max 只有 0/1/2/3。",
+    "檢查是否有異常 dose 值，例如 1272、1080 這類可疑數值，需回頭確認單位或輸入錯誤。",
+    "確認所有日期欄位格式一致。",
+    "確認 patient_baseline、surgery_events、rt_events 都能用 ipatient 正確對應。"
+  ],
+  "baseline_model_plan": {
+    "task": "binary_classification",
+    "label": "ORN_label",
+    "candidate_models": [
+      "LogisticRegression",
+      "RandomForest",
+      "XGBoost"
+    ],
+    "split": {
+      "train_test_split": "80/20",
+      "cross_validation": "5-fold"
+    },
+    "metrics": [
+      "ROC_AUC",
+      "Accuracy",
+      "F1",
+      "Recall",
+      "Precision"
+    ],
+    "preprocessing_notes": [
+      "類別欄位做 one-hot encoding。",
+      "數值欄位可做標準化，至少 LogisticRegression 前建議標準化。",
+      "資料量不大，先做 baseline，不急著上深度學習。"
+    ]
+  },
+  "survival_plan": {
+    "task": "time_to_event",
+    "start_time": "Index Date",
+    "end_time": "End point",
+    "event": "ORN_label",
+    "first_model": "Cox proportional hazards",
+    "derived_variable": "time_to_event = End point - Index Date",
+    "notes": [
+      "先用與 baseline 類似的 covariates 做 Cox model，保持分析一致性。",
+      "若之後要更嚴格處理多次手術/多次放療，可再做 time-dependent covariate 分析。",
+      "目前先完成 baseline Cox 即可。"
+    ]
+  },
+  "next_steps": [
+    "確認並修正異常 dose 值。",
+    "finalize model_baseline 欄位。",
+    "開始 baseline ML。",
+    "完成 baseline 後再做 survival analysis。",
+    "最後再評估是否加入 Panoramic 影像建立多模態模型。"
+  ]
+}
